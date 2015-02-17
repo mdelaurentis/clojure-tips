@@ -37,6 +37,8 @@ class: center, middle
 
 # Vars
 
+---
+
 # Laziness
 
 What does `map` do?
@@ -91,14 +93,69 @@ side effects                            wrong with you?
 
 ---              
 
-* channels
-* buffers
-* channel operations
-* go 
-* thread
-* advice
+* clojure.core
+  * ref
+  * delay
+  * agent 
+  * future
+* clojure.core.async
+  * channels
+  * buffers
+  * channel operations
+  * go 
+  * thread
+  * advice
 
 ---
+
+# ref
+
+```clojure
+(def counter (ref 1))
+
+;; In some other threads
+(dosync (alter counter inc))
+
+;; later
+
+@counter
+
+=> 1
+```
+
+---
+
+# future
+
+```clojure
+(let [a (future (do-some-work))]
+  ;; ... some time later
+  @a)
+
+=> (whatever do-some-work returned)
+```
+
+# delay
+
+```clojure
+(def words
+  (delay
+    (-> "words.txt" slurp split-lines)))
+```
+
+---
+
+# agent
+
+
+```clojure
+(let [a (agent 0)]
+  (send a inc)
+  (send a * 2)
+  @a)
+
+=> 4
+```
 
 # channel 
 
@@ -231,6 +288,8 @@ side effects                            wrong with you?
   :default :couldnt-immediately-queue-job)
 ```
 
+---
+
 # channel operations 
 
 ## `close!`
@@ -243,13 +302,6 @@ side effects                            wrong with you?
 
 # `go`
 
-* Macro
-* Examines body for channel operations like `<!`, `>!`, `alt!`
-* Executes body on a thread pool
-* When it hits a channel operation:
-  * "parks" the go block until it completes
-  * frees up the thread to run another go block
-
 ```clojure
 (go 
   (loop []
@@ -257,6 +309,67 @@ side effects                            wrong with you?
       (>! results (do-work job)))))
 ```
 
+* Macro
+* Examines body for channel operations like `<!`, `>!`, `alt!`
+* Executes body on a thread pool
+* When it hits a channel operation:
+  * "parks" the go block until it completes
+  * frees up the thread to run another go block
+
+---
+
+# `go-loop`
+
+```clojure
+(go-loop []
+  (when-let [job (<! work)]
+    (>! results (do-work job)))
+```
+
+---
+
+# Thread pools
+
+## clojure.lang.Agent
+
+### Pooled Executor
+
+* For agent `send` actions
+* Fixed, 2 + number of processors
+* Not at all appropriate for IO
+
+```java
+
+volatile public static ExecutorService pooledExecutor =
+        Executors.newFixedThreadPool(2 + Runtime.getRuntime().availableProcessors(),
+                createThreadFactory("clojure-agent-send-pool-%d", sendThreadPoolCounter));
+
+volatile public static ExecutorService soloExecutor = Executors.newCachedThreadPool(
+        createThreadFactory("clojure-agent-send-off-pool-%d", sendOffThreadPoolCounter));
+```
+
+---
+
+# Thread pools
+
+## clojure.lang.Agent
+
+### Solo Executor
+
+* For agent `send-off` actions
+* And `future`s
+* Cached
+* Good for IO
+
+```java
+
+volatile public static ExecutorService pooledExecutor =
+        Executors.newFixedThreadPool(2 + Runtime.getRuntime().availableProcessors(),
+                createThreadFactory("clojure-agent-send-pool-%d", sendThreadPoolCounter));
+
+volatile public static ExecutorService soloExecutor = Executors.newCachedThreadPool(
+        createThreadFactory("clojure-agent-send-off-pool-%d", sendOffThreadPoolCounter));
+```
 
 ---
 
