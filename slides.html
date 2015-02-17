@@ -89,7 +89,186 @@ side effects                            wrong with you?
 
 # Concurrency
 
+---              
+
+* channels
+* buffers
+* channel operations
+* go 
+* thread
+* advice
+
 ---
+
+# channel 
+
+## unbuffered
+
+
+```clojure
+(chan)
+```
+
+* Can't put unless a consumer is waiting to take. 
+* Can't take unless a producer is waiting to put.
+* Should be your go-to channel type
+
+---
+
+# channel
+
+## fixed buffer
+
+```clojure
+(chan 10)
+```
+* Allows producer to get ahead of consumer 
+
+---
+
+# channel
+
+## dropping buffer
+
+```clojure
+(chan (dropping-buffer 10))
+```
+ 
+* Holds up to 10 items
+* `put` never blocks
+* Drops newest item when full
+
+---
+
+# channel
+
+## sliding buffer
+
+```clojure
+(chan (sliding-buffer 10))
+```
+ 
+* Holds up to 10 items
+* `put` never blocks
+* Drops oldest item when full
+
+---
+
+# channel operations
+
+## `<!`
+
+```clojure
+(<! ch)
+```
+
+* Take an item from ch
+* Park if there's no item ready
+* Returns nil immediately if ch is closed
+
+---
+
+# channel operations
+
+## `>!`
+
+```clojure
+(!> ch item)
+```
+
+* Put an item on ch
+* Park if there's no room
+* Returns nil immediately if ch is closed
+
+---
+
+# channel operations
+
+## `alt!` - taking
+
+```clojure
+(alt!
+
+  ;; If we get a job from work-ch, run it 
+  work-ch
+  ([job] 
+    (run-job job))
+
+  (timeout 60000)
+  (log/info "No work after a minute"))
+```
+
+---
+
+# channel operations
+
+## `alt!` - putting
+
+```clojure
+(alt!
+
+  ;; If we get a job from work-ch, run it 
+  [work-ch job]
+  (log/info "I queued a job")
+
+  (timeout 60000)
+  (log/info "Couldn't queue a job after a minute"))
+```
+
+---
+
+# channel operations
+
+## `alt!` - `:default`
+
+```clojure
+(alt!
+
+  ;; If we get a job from work-ch, run it 
+  [work-ch job]
+  (log/info "I queued a job")
+
+  :default :couldnt-immediately-queue-job)
+```
+
+# channel operations 
+
+## `close!`
+
+* Anyone can close a channel
+* Immediately releases blocked producers & consumers
+* Subsequent puts & takes return nil without blocking
+
+---
+
+# `go`
+
+* Macro
+* Examines body for channel operations like `<!`, `>!`, `alt!`
+* Executes body on a thread pool
+* When it hits a channel operation:
+  * "parks" the go block until it completes
+  * frees up the thread to run another go block
+
+```clojure
+(go 
+  (loop []
+    (when-let [job (<! work)]
+      (>! results (do-work job)))))
+```
+
+
+---
+
+# Advice
+
+* Close channels to indicate no more work
+* Let close! propagate through the syste
+* Wait for go blocks and threads to finish
+* Don't do too much IO in `go` blocks
+  * Especially if there may be other `go` blocks in the same process
+* Use alt!
+* Use merge
 
 
     </textarea>
@@ -100,3 +279,5 @@ side effects                            wrong with you?
     </script>
   </body>
 </html>
+
+pres
