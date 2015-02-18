@@ -37,7 +37,124 @@ class: center, middle
 
 # Vars
 
+* A var is a global variable:
+
+```clojure
+(def one 
+  "The number one"
+  1)
+
+(defn say-hello [person]
+  "Say hello to person"
+  (println "Hello " person))
+```
+
+Both vars.
+
 ---
+
+# Vars
+
+* Evaluating a var returns its value.
+
+```clojure
+user=> (def one 1)
+#'user/one
+
+user=> one
+1
+```
+
+```clojure
+user=> (defn say-hello [person]
+         "Say hello to person."
+         (println "Hello " person))
+#'user/say-hello
+=> say-hello
+#<user$say-hello user$say-hello@614951ff>
+```
+
+---
+
+---
+
+# Vars
+
+## Can be invoked
+
+This:
+
+```clojure
+
+(say-hello "Mark")
+```
+
+is the same as this:
+
+```clojure
+(#'say-hello "Mark")
+```
+
+So you can pass vars around like you pass functions around.
+
+---
+
+# Vars - Metadata
+
+```clojure
+(defn cat
+  "Dump the file to stdout"
+  [filename]
+  (print (slurp filename)))
+```
+
+```clojure
+user=> (prn (meta #'cat))
+{:ns #<Namespace com.mdelaurentis.clojure-tips.vars>, 
+ :name cat,
+ :file "/Users/mdelaurentis/code/clojure-tips/src/com/mdelaurentis/clojure_tips/vars.clj",
+ :column 1,
+ :line 3,
+ :arglists ([filename]),
+ :doc "Dump the file to stdout"}
+```
+
+```clojure
+user=> (meta cat)
+nil
+```
+
+---
+
+# Vars - Metadata
+
+```clojure
+(defn cat
+  "Dump the file to stdout"
+  [filename]
+  (print (slurp filename)))
+
+(defn rm
+  "Remove the file"
+  [filename]
+  (.delete (java.io.File. filename)))
+
+(defn cp
+  "Copy file from source to destination"
+  [source destination]
+  (spit destination (slurp source)))
+
+(doseq [command [#'cat #'rm #'cp]]
+  (println (:name (meta command)) "-" (:doc (meta command))))
+```
+
+```
+cat - Dump the file to stdout
+rm - Remove the file
+cp - Copy file from source to destination
+```
+---
+
 
 # Laziness
 
@@ -94,10 +211,10 @@ side effects                            wrong with you?
 ---              
 
 * clojure.core
-  * ref
-  * delay
-  * agent 
   * future
+  * ref
+  * agent 
+
 * clojure.core.async
   * channels
   * buffers
@@ -203,6 +320,12 @@ Don't do IO in shared fixed thread pool!
 
 ---
 
+# core.async
+
+* channels
+  * Like blocking queue
+* go, thread
+
 ---
 
 # core.async
@@ -263,120 +386,12 @@ Don't do IO in shared fixed thread pool!
 
 # core.async
 
-## `go`
+## timeout 
 
 ```clojure
-(go 
-  (>! queue "Jim")
-  (>! queue "Mary"))
+;; Wait a minute...
+(go (<! (timeout 60000)))
 ```
-
-* Macro
-* Examines body for channel operations like `<!`, `>!`, `alt!`
-* Executes body on another thread
-* When it hits a channel operation:
-  * "parks" the go block until it completes
-  * Yields the thread to run another go block
-
----
-
-# core.async
-
-## So far:
-
-* chan - create a channel
-* <! - take an item
-* >! - put an item
-* close! - close the channel
-* go - run block on another thread
-
----
-
-# core.async
-
-## What's this "other thread"?
-
-```clojure
-(defonce the-executor
-  (Executors/newFixedThreadPool
-   (-> (Runtime/getRuntime)
-       (.availableProcessors)
-       (* 2)
-       (+ 42))
-   (conc/counted-thread-factory "async-dispatch-%d" true)))
-```
-
-* Fixed number of threads
-* 2 * number of processors
-* \+ 42
-
----
-
-# core.async
-
-## So am I limited to 44 go blocks?
-
-No!
-
-A go block yields to another go block when it is parked.
-
-```clojure
-(def queue (chan))
-
-(go (>! queue "Bill"))
-
-(go (>! queue "Chris"))
-
-(go-loop []
-  (when-let [name (<! queue)]
-    (println name)
-    (recur)))
-```
-
----
-
-# core.async
-
-## IO
-
-```clojure
-(go-loop []
-  (when-let [job (<! queue)]
-    (Thread/sleep 10000)
-    (println name)
-    (recur)))
-
-```
-(let [workers (for [i (range 100)]
-                (
-
----
-
-# channel
-
-## dropping buffer
-
-```clojure
-(chan (dropping-buffer 10))
-```
- 
-* Holds up to 10 items
-* `put` never blocks
-* Drops newest item when full
-
----
-
-# channel
-
-## sliding buffer
-
-```clojure
-(chan (sliding-buffer 10))
-```
- 
-* Holds up to 10 items
-* `put` never blocks
-* Drops oldest item when full
 
 ---
 
@@ -432,6 +447,146 @@ A go block yields to another go block when it is parked.
 
   :default :couldnt-immediately-queue-job)
 ```
+
+---
+
+# core.async
+
+## `go`
+
+```clojure
+(go 
+  (>! queue "Jim")
+  (>! queue "Mary"))
+```
+
+* Macro
+* Examines body for channel operations like `<!`, `>!`, `alt!`
+* Executes body on another thread
+* When it hits a channel operation:
+  * "parks" the go block until it completes
+  * Yields the thread to run another go block
+
+---
+
+# core.async
+
+## What's this "other thread"?
+
+```clojure
+(defonce the-executor
+  (Executors/newFixedThreadPool
+   (-> (Runtime/getRuntime)
+       (.availableProcessors)
+       (* 2)
+       (+ 42))
+   (conc/counted-thread-factory "async-dispatch-%d" true)))
+```
+
+* Fixed number of threads
+* 2 * number of processors
+* \+ 42
+
+---
+
+# core.async
+
+## So am I limited to 44 go blocks?
+
+No!
+
+A go block yields to another go block when it is parked.
+
+```clojure
+(def queue (chan))
+
+(go (>! queue "Bill"))
+
+(go (>! queue "Chris"))
+
+(go-loop []
+  (when-let [name (<! queue)]
+    (println name)
+    (recur)))
+```
+
+
+---
+
+# core.async
+
+## IO
+
+```clojure
+(go-loop []
+  (when-let [name (<! queue)]
+    (Thread/sleep 60000)
+    (println name)
+    (recur)))
+```
+
+* Go only parks on small set of channel operations.
+* Other blocking calls will tie up a thread in the pool.
+* Too many go blocks doing IO or sleeping can easily fill up the entire thread pool.
+
+```clojure
+(go-loop []
+  (when-let [url (<! queue)]
+    (let [contents (fetch url)]
+      (jdbc/insert! db :cached-pages {:url url, :content content})))
+      (recur))))
+```
+
+---
+
+# core.async
+
+## thread
+
+
+```clojure
+(go-loop []
+  (when-let [url (<! queue)]
+    (let [contents (<! (thread (fetch url)))]
+      (<! (thread (jdbc/insert! db :cached-pages {:url url, :content content})))
+      (recur))))
+```
+
+* A macro, like go
+* Returns a channel that produces the result of the body.
+* Unlike go:
+  * Reserves a *real thread* for the duration of the body
+  * Does not park on `<!` or `>!`.
+  * Use `<!!` and `>!!` instead.
+  * They block, not park.
+  
+---
+
+# channel
+
+## dropping buffer
+
+```clojure
+(chan (dropping-buffer 10))
+```
+ 
+* Holds up to 10 items
+* `put` never blocks
+* Drops newest item when full
+
+---
+
+# channel
+
+## sliding buffer
+
+```clojure
+(chan (sliding-buffer 10))
+```
+ 
+* Holds up to 10 items
+* `put` never blocks
+* Drops oldest item when full
 
 ---
 
