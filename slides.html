@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!DCTYPE html>
 <html>
   <head>
     <title>Clojure Best Practices</title>
@@ -31,13 +31,16 @@ class: center, middle
 3. Records
 2. Laziness
 4. Concurrency
-  1. delay, future, ref, agent, atom
-  2. clojure.core.async
+
 ---
 
 # Vars
 
-* A var is a global variable:
+---
+
+# Vars
+
+## Global variable
 
 ```clojure
 (def one 
@@ -55,7 +58,7 @@ Both vars.
 
 # Vars
 
-* Evaluating a var returns its value.
+## Can be evaluated
 
 ```clojure
 user=> (def one 1)
@@ -75,6 +78,22 @@ user=> (defn say-hello [person]
 ```
 
 ---
+
+# Vars
+
+## Can be quoted
+
+```clojure
+user=> #'one
+#'user/one
+```
+
+```clojure
+user=> #'say-hello
+#'usr/say-hello
+```
+
+Quoting gives you *the var itself*. Not the value it points to.
 
 ---
 
@@ -155,12 +174,29 @@ cp - Copy file from source to destination
 ```
 ---
 
+# Laziness
+
+---
 
 # Laziness
 
-What does `map` do?
+Why doesn't this print anything?
 
 ```clojure
+(let [items [1 2 3]]
+  (map println items)
+  items)
+```
+
+Laziness.
+
+---
+
+# Laziness
+
+## What does `map` do?
+
+```
 user=> (doc map)
 -------------------------
 clojure.core/map
@@ -172,7 +208,26 @@ clojure.core/map
   f should accept number-of-colls arguments.
 ```
 
+---
+
+# Laziness
+
+## doseq
+
 ```clojure
+(let [items [1 2 3]]
+  (doseq [item items]
+    (println item))
+  items)
+```
+
+---
+
+# Laziness
+
+## What does doseq do?
+
+```
 user=> (doc doseq)
 -------------------------
 clojure.core/doseq
@@ -187,20 +242,113 @@ Macro
 
 # Laziness
 
+## What about `doall`?
 
 ```
-            Will you consume the result?
-
-                Will consume          Will not consume
-
-
-Need side      (doall (map f coll))      (doseq [c coll]
-effects        or (loop ...)             (f c))
-
-
-Don't need     (map f coll)              What is 
-side effects                            wrong with you?
+user=> (doc doall)
+-------------------------
+clojure.core/doall
+([coll] [n coll])
+  When lazy sequences are produced via functions that have side
+  effects, any effects other than those needed to produce the first
+  element in the seq do not occur until the seq is consumed. doall can
+  be used to force any effects. Walks through the successive nexts of
+  the seq, retains the head and returns it, thus causing the entire
+  seq to reside in memory at one time.
 ```
+
+---
+
+# Laziness
+
+## doall
+
+```clojure
+(with-open [r (io/reader "file.txt")]
+  (doall (line-seq r)))
+```
+
+---
+
+# Laziness
+
+```
+                       Will you consume the result?
+
+                  Will consume             Will not consume
+
+
+
+Need side        (doall (map f coll))
+effects           or (loop ...)
+
+
+
+Don't need 
+side effects
+```
+
+---
+
+# Laziness
+
+```
+                       Will you consume the result?
+
+                  Will consume             Will not consume
+
+
+
+Need side        (doall (map f coll))
+effects           or (loop ...)
+
+
+
+Don't need       (map f coll)
+side effects 
+```
+
+---
+
+# Laziness
+
+```
+                       Will you consume the result?
+
+                  Will consume             Will not consume
+
+
+
+Need side        (doall (map f coll))       (doseq [c coll]
+effects           or (loop ...)               (f c))
+
+
+
+Don't need       (map f coll)
+side effects
+```
+
+---
+
+# Laziness
+
+```
+                       Will you consume the result?
+
+                  Will consume             Will not consume
+
+
+
+Need side        (doall (map f coll))       (doseq [c coll]
+effects           or (loop ...)               (f c))
+
+
+
+Don't need       (map f coll)               What is 
+side effects                                wrong with you?
+```
+
+---
 
 # Records
 
@@ -208,49 +356,66 @@ side effects                            wrong with you?
 
 # Concurrency
 
----              
-
-* clojure.core
-  * future
-  * ref
-  * agent 
-
-* clojure.core.async
-  * channels
-  * buffers
-  * channel operations
-  * go 
-  * thread
-  * advice
-
 ---
 
-# ref
+# Concurrency
 
-```clojure
-(def counter (ref 1))
+## clojure.core
 
-;; In some other threads
-(dosync (alter counter inc))
+* future
+* ref
+* agent 
 
-;; later
+### clojure.core.async
 
-@counter
+* channels
+* channel operations
 
-=> 1
-```
+### Thread pools
+
+* go
+* thread
+* future
+* agents
 
 ---
 
 # future
 
 ```clojure
-(let [a (future (do-some-work))]
+(let [result (future (slurp "file.txt"))]
   ;; ... some time later
-  @a)
-
-=> (whatever do-some-work returned)
+  @result) ;; deref to get result
 ```
+
+* Runs body on another thread
+* Deref to get result of body
+* Deref will block until body is done
+
+---
+
+# ref
+
+```clojure
+
+(def all-words (ref #{}))
+
+(future (dosync (alter all-words conj "hello")))
+(future (dosync (alter all-words conj "there")))
+...
+
+(println "I know " (count @all-words))
+```
+
+* Mutable storage location
+* Can be changed with multiple threads concurrently
+  * only inside `dosync` block
+  * `dosync` provides transaction isolation
+* Get current value with deref operator - @
+  * `deref` never blocks
+
+
+---
 
 # delay
 
@@ -258,7 +423,15 @@ side effects                            wrong with you?
 (def words
   (delay
     (-> "words.txt" slurp split-lines)))
+
+...
+
+@words ;; file is only slurped once
 ```
+
+* Runs body exactly once
+* ... when it's first deref'ed
+* On the thread that derefs it
 
 ---
 
@@ -274,41 +447,35 @@ side effects                            wrong with you?
 
 ```
 
-* Deref never blocks
-* @agent always returns latest stored value
-* send takes an agent, function, and args
-* On another thread, executes (f agent args)
+* Mutable storage location
+* Only changed by one thread at a time
+  * To modify, `send` a function and the args to the agent
+  * `send` runs (apply f agent args) in another thread)
+  * and uses the result as new value of agent
+* Get current value with deref
+  * deref never blocks
 
 ---
 
-# agent
+# core.async
 
-## send thread pool
-
-From clojure.lang.Agents:
-
-```java
-volatile public static ExecutorService pooledExecutor =
-        Executors.newFixedThreadPool(2 + Runtime.getRuntime().availableProcessors(),
-                createThreadFactory("clojure-agent-send-pool-%d", sendThreadPoolCounter));
-```
-
-Don't do IO in shared fixed thread pool!
+* channels
+* channel operations
+* threading
 
 ---
 
-```clojure
-(let [a (agent {:url "http://rjmetrics.com"})]
-  (send a #(assoc % :content (slurp url))
-  (send a assoc :last-name "DeLaurentis")
-  @a)
+# core.async
 
+## Channels
 
+* Basically blocking queues
 
-# channel 
+---
 
-## unbuffered
+# core.async
 
+## Unbuffered channel
 
 ```clojure
 (chan)
@@ -322,22 +489,76 @@ Don't do IO in shared fixed thread pool!
 
 # core.async
 
-* channels
-  * Like blocking queue
-* go, thread
+## Buffered channel
+
+```clojure
+(chan 10)
+```
+
+* Holds up to 10 items
+* Put blocks if buffer is full
+* Take blocks if buffer is empty
+
+---
+
+# channel
+
+## dropping buffer
+
+```clojure
+(chan (dropping-buffer 10))
+```
+ 
+* Holds up to 10 items
+* Put never blocks
+* Drops newest item when full
+
+---
+
+# channels
+
+## sliding buffer
+
+```clojure
+(chan (sliding-buffer 10))
+```
+ 
+* Holds up to 10 items
+* `put` never blocks
+* Drops oldest item when full
 
 ---
 
 # core.async
 
-### Create a channel
+## Closing a channel
 
 ```clojure
-(def queue (chan))
+(close! ch)
 ```
 
-* Like a blocking queue
-* Supports blocking put, take, close
+* Immediately releases blocked producers & consumers
+* Subsequent puts & takes don't block
+* Channels *never* produce nil when open
+* ... *always* produce nil when closed
+
+
+---
+
+# core.async
+
+## timeout 
+
+```clojure
+;; Wait a minute...
+(go (<! (timeout 60000)))
+```
+
+---
+
+# core.async
+
+## Channel Operations
 
 ---
 
@@ -368,30 +589,6 @@ Don't do IO in shared fixed thread pool!
 * Take an item from ch
 * Park if there's no item ready
 * Returns nil immediately if ch is closed
-
----
-
-# core.async
-
-## Closing a channel
-
-```clojure
-(close! ch)
-```
-
-* Immediately releases blocked producers & consumers
-* Subsequent puts & takes return nil without blocking
-
----
-
-# core.async
-
-## timeout 
-
-```clojure
-;; Wait a minute...
-(go (<! (timeout 60000)))
-```
 
 ---
 
@@ -471,7 +668,93 @@ Don't do IO in shared fixed thread pool!
 
 # core.async
 
-## What's this "other thread"?
+# `go-loop`
+
+```clojure
+(go 
+  (loop []
+    (when-let [job (<! work)]
+      ...)))
+```
+
+---
+
+# core.async
+
+# `go-loop`
+
+```clojure
+(go-loop []
+  (when-let [job (<! work)]
+    ...)))
+```
+    
+---
+
+# core.async
+
+## `go` returns a channel
+
+```clojure
+(go 
+  (let [queue (chan)
+
+        producer (go
+                   (doseq [person people]
+                     (>! queue person)))
+
+        consumer (go-loop []
+                   (when-let [name (<! queue)]
+                     (println "Hello" name)
+                     (recur)))]
+    (<! producer)
+    (<! consumer)
+    (println "Everyone has been greeted")))
+```
+
+* Go returns a channel
+* ... that is closed when the go block is done
+* Wait for your go blocks!
+
+---
+
+# Thread Pools
+
+* go
+* thread
+* future
+* agent
+
+---
+
+# Thread Pools
+
+## go - parking
+
+`<!`, `>!`, and `alt!` tell `go` that it should park until the channel operation is ready.
+
+```clojure
+(go 
+  (let [queue (chan)
+
+        producer (go
+                   (doseq [person people]
+                     (>! queue person)))
+
+        consumer (go-loop []
+                   (when-let [name (<! queue)]
+                     (println "Hello" name)
+                     (recur)))]
+    (<! producer)
+    (<! consumer)
+    (println "Everyone has been greeted")))
+```
+
+---
+
+# Thread Pools
+
+## go thread pool
 
 ```clojure
 (defonce the-executor
@@ -489,33 +772,9 @@ Don't do IO in shared fixed thread pool!
 
 ---
 
-# core.async
+# Thread Pools
 
-## So am I limited to 44 go blocks?
-
-No!
-
-A go block yields to another go block when it is parked.
-
-```clojure
-(def queue (chan))
-
-(go (>! queue "Bill"))
-
-(go (>! queue "Chris"))
-
-(go-loop []
-  (when-let [name (<! queue)]
-    (println name)
-    (recur)))
-```
-
-
----
-
-# core.async
-
-## IO
+## IO - dangerous
 
 ```clojure
 (go-loop []
@@ -539,7 +798,7 @@ A go block yields to another go block when it is parked.
 
 ---
 
-# core.async
+# Thread Pools
 
 ## thread
 
@@ -552,92 +811,33 @@ A go block yields to another go block when it is parked.
       (recur))))
 ```
 
-* A macro, like go
+* A macro
+* Runs the body on another thread
 * Returns a channel that produces the result of the body.
 * Unlike go:
   * Reserves a *real thread* for the duration of the body
   * Does not park on `<!` or `>!`.
   * Use `<!!` and `>!!` instead.
   * They block, not park.
-  
----
-
-# channel
-
-## dropping buffer
-
-```clojure
-(chan (dropping-buffer 10))
-```
- 
-* Holds up to 10 items
-* `put` never blocks
-* Drops newest item when full
 
 ---
 
-# channel
-
-## sliding buffer
-
-```clojure
-(chan (sliding-buffer 10))
-```
- 
-* Holds up to 10 items
-* `put` never blocks
-* Drops oldest item when full
-
----
-
-# core.async
-
-# `go-loop`
-
-```clojure
-(go 
-  (loop []
-    (when-let [job (<! work)]
-      ...)))
-```
-
----
-
-# core.async
-
-# `go-loop`
-
-```clojure
-(go-loop []
-  (when-let [job (<! work)]
-    ...)))
-```
-# Thread pools
-
-```
-(go-loop []
-                     (when-let [url (<! queue)]
-    (jdbc/insert! url
-
----
-
----
+# Where is my code run?
 
 ```
          How to   Blocking?  Who runs it?
          get 
          result?
-delay    @         yes        Whoever first derefs it
 
-future   @         yes        Real thread from unbounded pool
+future   @         yes        Cached
 
-send     @         no         Real thread from bounded pool
+send     @         no         Fixed
 
-send-off @         no         Real thread from unbounded pool
+send-off @         no         Cached
 
-go       <!        yes        Logical thread from bounded pool
+go       <!        yes        Fixed
 
-thread   <!        yes        Real thread from bounded pool
+thread   <!        yes        Cached
 ```
 
 ---
@@ -657,9 +857,6 @@ thread   <!        yes        Real thread from bounded pool
 volatile public static ExecutorService pooledExecutor =
         Executors.newFixedThreadPool(2 + Runtime.getRuntime().availableProcessors(),
                 createThreadFactory("clojure-agent-send-pool-%d", sendThreadPoolCounter));
-
-volatile public static ExecutorService soloExecutor = Executors.newCachedThreadPool(
-        createThreadFactory("clojure-agent-send-off-pool-%d", sendOffThreadPoolCounter));
 ```
 
 ---
@@ -676,11 +873,6 @@ volatile public static ExecutorService soloExecutor = Executors.newCachedThreadP
 * Good for IO
 
 ```java
-
-volatile public static ExecutorService pooledExecutor =
-        Executors.newFixedThreadPool(2 + Runtime.getRuntime().availableProcessors(),
-                createThreadFactory("clojure-agent-send-pool-%d", sendThreadPoolCounter));
-
 volatile public static ExecutorService soloExecutor = Executors.newCachedThreadPool(
         createThreadFactory("clojure-agent-send-off-pool-%d", sendOffThreadPoolCounter));
 ```
@@ -707,4 +899,3 @@ volatile public static ExecutorService soloExecutor = Executors.newCachedThreadP
   </body>
 </html>
 
-pres
