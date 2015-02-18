@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>Title</title>
+    <title>Clojure Best Practices</title>
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
     <style type="text/css">
       @import url(https://fonts.googleapis.com/css?family=Yanone+Kaffeesatz);
@@ -147,15 +147,46 @@ side effects                            wrong with you?
 
 # agent
 
-
 ```clojure
-(let [a (agent 0)]
-  (send a inc)
-  (send a * 2)
+(let [a (agent {:id 1})]
+  (send a assoc :first-name "Mike")
+  (send a assoc :last-name "DeLaurentis")
   @a)
 
-=> 4
+=> ?
+
 ```
+
+* Deref never blocks
+* @agent always returns latest stored value
+* send takes an agent, function, and args
+* On another thread, executes (f agent args)
+
+---
+
+# agent
+
+## send thread pool
+
+From clojure.lang.Agents:
+
+```java
+volatile public static ExecutorService pooledExecutor =
+        Executors.newFixedThreadPool(2 + Runtime.getRuntime().availableProcessors(),
+                createThreadFactory("clojure-agent-send-pool-%d", sendThreadPoolCounter));
+```
+
+Don't do IO in shared fixed thread pool!
+
+---
+
+```clojure
+(let [a (agent {:url "http://rjmetrics.com"})]
+  (send a #(assoc % :content (slurp url))
+  (send a assoc :last-name "DeLaurentis")
+  @a)
+
+
 
 # channel 
 
@@ -172,14 +203,152 @@ side effects                            wrong with you?
 
 ---
 
-# channel
+---
 
-## fixed buffer
+# core.async
+
+### Create a channel
 
 ```clojure
-(chan 10)
+(def queue (chan))
 ```
-* Allows producer to get ahead of consumer 
+
+* Like a blocking queue
+* Supports blocking put, take, close
+
+---
+
+# core.async
+
+## Putting an item
+
+```clojure
+(go (!> ch item))
+```
+
+* Tries to put an item on ch
+* Park if there's no room
+* Returns nil immediately if `ch` is closed
+
+---
+
+# core.async
+
+## Taking an item
+
+```clojure
+(go 
+  (let [person (<! ch)]
+    (println "Hello " person)))
+```
+
+* Take an item from ch
+* Park if there's no item ready
+* Returns nil immediately if ch is closed
+
+---
+
+# core.async
+
+## Closing a channel
+
+```clojure
+(close! ch)
+```
+
+* Immediately releases blocked producers & consumers
+* Subsequent puts & takes return nil without blocking
+
+---
+
+# core.async
+
+## `go`
+
+```clojure
+(go 
+  (>! queue "Jim")
+  (>! queue "Mary"))
+```
+
+* Macro
+* Examines body for channel operations like `<!`, `>!`, `alt!`
+* Executes body on another thread
+* When it hits a channel operation:
+  * "parks" the go block until it completes
+  * Yields the thread to run another go block
+
+---
+
+# core.async
+
+## So far:
+
+* chan - create a channel
+* <! - take an item
+* >! - put an item
+* close! - close the channel
+* go - run block on another thread
+
+---
+
+# core.async
+
+## What's this "other thread"?
+
+```clojure
+(defonce the-executor
+  (Executors/newFixedThreadPool
+   (-> (Runtime/getRuntime)
+       (.availableProcessors)
+       (* 2)
+       (+ 42))
+   (conc/counted-thread-factory "async-dispatch-%d" true)))
+```
+
+* Fixed number of threads
+* 2 * number of processors
+* \+ 42
+
+---
+
+# core.async
+
+## So am I limited to 44 go blocks?
+
+No!
+
+A go block yields to another go block when it is parked.
+
+```clojure
+(def queue (chan))
+
+(go (>! queue "Bill"))
+
+(go (>! queue "Chris"))
+
+(go-loop []
+  (when-let [name (<! queue)]
+    (println name)
+    (recur)))
+```
+
+---
+
+# core.async
+
+## IO
+
+```clojure
+(go-loop []
+  (when-let [job (<! queue)]
+    (Thread/sleep 10000)
+    (println name)
+    (recur)))
+
+```
+(let [workers (for [i (range 100)]
+                (
 
 ---
 
@@ -213,34 +382,6 @@ side effects                            wrong with you?
 
 # channel operations
 
-## `<!`
-
-```clojure
-(<! ch)
-```
-
-* Take an item from ch
-* Park if there's no item ready
-* Returns nil immediately if ch is closed
-
----
-
-# channel operations
-
-## `>!`
-
-```clojure
-(!> ch item)
-```
-
-* Put an item on ch
-* Park if there's no room
-* Returns nil immediately if ch is closed
-
----
-
-# channel operations
-
 ## `alt!` - taking
 
 ```clojure
@@ -254,6 +395,10 @@ side effects                            wrong with you?
   (timeout 60000)
   (log/info "No work after a minute"))
 ```
+
+* Think of it like `cond`
+* Attempts two or more channel operation
+* Executes the code block under the first one that succeeds
 
 ---
 
@@ -290,40 +435,54 @@ side effects                            wrong with you?
 
 ---
 
-# channel operations 
+# core.async
 
-## `close!`
-
-* Anyone can close a channel
-* Immediately releases blocked producers & consumers
-* Subsequent puts & takes return nil without blocking
-
----
-
-# `go`
+# `go-loop`
 
 ```clojure
 (go 
   (loop []
     (when-let [job (<! work)]
-      (>! results (do-work job)))))
+      ...)))
 ```
 
-* Macro
-* Examines body for channel operations like `<!`, `>!`, `alt!`
-* Executes body on a thread pool
-* When it hits a channel operation:
-  * "parks" the go block until it completes
-  * frees up the thread to run another go block
-
 ---
+
+# core.async
 
 # `go-loop`
 
 ```clojure
 (go-loop []
   (when-let [job (<! work)]
-    (>! results (do-work job)))
+    ...)))
+```
+# Thread pools
+
+```
+(go-loop []
+                     (when-let [url (<! queue)]
+    (jdbc/insert! url
+
+---
+
+---
+
+```
+         How to   Blocking?  Who runs it?
+         get 
+         result?
+delay    @         yes        Whoever first derefs it
+
+future   @         yes        Real thread from unbounded pool
+
+send     @         no         Real thread from bounded pool
+
+send-off @         no         Real thread from unbounded pool
+
+go       <!        yes        Logical thread from bounded pool
+
+thread   <!        yes        Real thread from bounded pool
 ```
 
 ---
