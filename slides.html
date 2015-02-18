@@ -21,18 +21,27 @@
 
 class: center, middle
 
-# Title
+# Clojure Tips
+
+### Mike DeLaurentis
 
 ---
 
-# Agenda
+# Topics:
 
-1. Vars
-3. Records
-2. Laziness
-4. Concurrency
+## Vars
+
+## Laziness
+
+## Concurrency
+
+* `clojure.core`
+* `clojure.core.async`
+* Thread Pools
 
 ---
+
+class: center, middle
 
 # Vars
 
@@ -350,33 +359,31 @@ side effects                                wrong with you?
 
 ---
 
-# Records
-
----
-
 # Concurrency
 
----
-
-# Concurrency
-
-## clojure.core
-
-* future
-* ref
-* agent 
+### clojure.core
 
 ### clojure.core.async
 
-* channels
-* channel operations
+### Thread Pools
 
-### Thread pools
+---
 
-* go
-* thread
-* future
-* agents
+# delay
+
+```clojure
+(def words
+  (delay
+    (-> "words.txt" slurp split-lines)))
+
+...
+
+@words ;; file is only slurped once
+```
+
+* Runs body exactly once
+* ... when it's first deref'ed
+* On the thread that derefs it
 
 ---
 
@@ -419,30 +426,12 @@ side effects                                wrong with you?
 
 ---
 
-# delay
-
-```clojure
-(def words
-  (delay
-    (-> "words.txt" slurp split-lines)))
-
-...
-
-@words ;; file is only slurped once
-```
-
-* Runs body exactly once
-* ... when it's first deref'ed
-* On the thread that derefs it
-
----
-
 # agent
 
 ```clojure
-(let [a (agent {:id 1})]
-  (send a assoc :first-name "Mike")
-  (send a assoc :last-name "DeLaurentis")
+(let [a (words #{})]
+  (send a conj "dog")
+  (send a conj "cat")
   @a)
 
 => ?
@@ -459,11 +448,21 @@ side effects                                wrong with you?
 
 ---
 
+# agent
+
+## Use case: schema service
+
+* One agent per client
+* Keep schema as agent's state
+* To update schema, send action that validates the change & saves in database
+
+---
+
 # core.async
 
 * channels
 * channel operations
-* threading
+* go & thread
 
 ---
 
@@ -475,7 +474,7 @@ side effects                                wrong with you?
 
 ---
 
-# core.async
+# Channels
 
 ## Unbuffered channel
 
@@ -489,7 +488,7 @@ side effects                                wrong with you?
 
 ---
 
-# core.async
+# Channels
 
 ## Buffered channel
 
@@ -503,7 +502,7 @@ side effects                                wrong with you?
 
 ---
 
-# channel
+# Channels
 
 ## dropping buffer
 
@@ -517,7 +516,7 @@ side effects                                wrong with you?
 
 ---
 
-# channels
+# Channels
 
 ## sliding buffer
 
@@ -531,7 +530,7 @@ side effects                                wrong with you?
 
 ---
 
-# core.async
+# Channels
 
 ## Closing a channel
 
@@ -544,10 +543,9 @@ side effects                                wrong with you?
 * Channels *never* produce nil when open
 * ... *always* produce nil when closed
 
-
 ---
 
-# core.async
+# Channels
 
 ## timeout 
 
@@ -564,7 +562,7 @@ side effects                                wrong with you?
 
 ---
 
-# core.async
+# Channel Operations
 
 ## Putting an item
 
@@ -578,7 +576,7 @@ side effects                                wrong with you?
 
 ---
 
-# core.async
+# Channel Operations
 
 ## Taking an item
 
@@ -594,7 +592,7 @@ side effects                                wrong with you?
 
 ---
 
-# channel operations
+# Channel Operations
 
 ## `alt!` - taking
 
@@ -616,7 +614,7 @@ side effects                                wrong with you?
 
 ---
 
-# channel operations
+# Channel Operations
 
 ## `alt!` - putting
 
@@ -633,7 +631,7 @@ side effects                                wrong with you?
 
 ---
 
-# channel operations
+# Channel Operations
 
 ## `alt!` - `:default`
 
@@ -651,6 +649,12 @@ side effects                                wrong with you?
 
 # core.async
 
+## go & thread
+
+---
+
+# go & thread
+
 ## `go`
 
 ```clojure
@@ -660,17 +664,16 @@ side effects                                wrong with you?
 ```
 
 * Macro
-* Examines body for channel operations like `<!`, `>!`, `alt!`
-* Executes body on another thread
-* When it hits a channel operation:
-  * "parks" the go block until it completes
-  * Yields the thread to run another go block
+* Runs body on another thread
+* Returns a channel:
+  * Produces the last value in the body
+  * Closed when the body is done
 
 ---
 
-# core.async
+# go & thread
 
-# `go-loop`
+## `go-loop`
 
 ```clojure
 (go 
@@ -681,9 +684,9 @@ side effects                                wrong with you?
 
 ---
 
-# core.async
+# go & thread
 
-# `go-loop`
+## `go-loop`
 
 ```clojure
 (go-loop []
@@ -693,17 +696,19 @@ side effects                                wrong with you?
     
 ---
 
-# core.async
+# go & thread
 
-## `go` returns a channel
+## `go` - bigger example
 
 ```clojure
 (go 
-  (let [queue (chan)
+  (let [people ["john", "paul", "george", "ringo"],
+        queue (chan)
 
         producer (go
                    (doseq [person people]
-                     (>! queue person)))
+                     (>! queue person)
+                   (close! queue)))
 
         consumer (go-loop []
                    (when-let [name (<! queue)]
@@ -714,9 +719,23 @@ side effects                                wrong with you?
     (println "Everyone has been greeted")))
 ```
 
-* Go returns a channel
-* ... that is closed when the go block is done
-* Wait for your go blocks!
+* Close channels
+* Wait for your go blocks
+
+---
+
+# go & thread
+
+## `thread`
+
+```clojure
+(thread (>!! ch item))
+```
+
+* Macro
+* Like go, used for running channel operations on a different thread
+* but uses different thread pool
+* and different channel operations
 
 ---
 
@@ -731,32 +750,7 @@ side effects                                wrong with you?
 
 # Thread Pools
 
-## go - parking
-
-`<!`, `>!`, and `alt!` tell `go` that it should park until the channel operation is ready.
-
-```clojure
-(go 
-  (let [queue (chan)
-
-        producer (go
-                   (doseq [person people]
-                     (>! queue person)))
-
-        consumer (go-loop []
-                   (when-let [name (<! queue)]
-                     (println "Hello" name)
-                     (recur)))]
-    (<! producer)
-    (<! consumer)
-    (println "Everyone has been greeted")))
-```
-
----
-
-# Thread Pools
-
-## go thread pool
+## go - fixed thread pool
 
 ```clojure
 (defonce the-executor
@@ -776,7 +770,34 @@ side effects                                wrong with you?
 
 # Thread Pools
 
-## IO - dangerous
+## go - parking
+
+```clojure
+(go 
+  (let [queue (chan)
+
+        producer (go
+                   (doseq [person people]
+                     (>! queue person)))
+
+        consumer (go-loop []
+                   (when-let [name (<! queue)]
+                     (println "Hello" name)
+                     (recur)))]
+    (<! producer)
+    (<! consumer)
+    (println "Everyone has been greeted")))
+```
+
+`<!`, `>!`, and `alt!` tell `go` that it should park until the channel operation is ready.
+
+Allows thread to run other `go` blocks while this one is waiting.
+
+---
+
+# Thread Pools
+
+## go - avoid IO
 
 ```clojure
 (go-loop []
@@ -802,8 +823,7 @@ side effects                                wrong with you?
 
 # Thread Pools
 
-## thread
-
+## `thread` macro
 
 ```clojure
 (go-loop []
@@ -818,33 +838,27 @@ side effects                                wrong with you?
 * Returns a channel that produces the result of the body.
 * Unlike go:
   * Reserves a *real thread* for the duration of the body
-  * Does not park on `<!` or `>!`.
-  * Use `<!!` and `>!!` instead.
-  * They block, not park.
+  * *Does not* park on `<!` or `>!`.
+  * Actually blocks the thread
+  
+---
+
+# Thread Pools
+
+## `thread` - cached thread pool
+
+```java
+(defonce ^:private ^Executor thread-macro-executor
+  (Executors/newCachedThreadPool
+    (conc/counted-thread-factory "async-thread-macro-%d" true)))
+```
+
+* `(thread ...)` always gives you a thread.
+* Reuses old threads once they are done their work.
 
 ---
 
-# Where is my code run?
-
-```
-         How to   Blocking?  Who runs it?
-         get 
-         result?
-
-future   @         yes        Cached
-
-send     @         no         Fixed
-
-send-off @         no         Cached
-
-go       <!        yes        Fixed
-
-thread   <!        yes        Cached
-```
-
----
-
-# Thread pools
+# Thread Pools
 
 ## clojure.lang.Agent
 
@@ -863,7 +877,7 @@ volatile public static ExecutorService pooledExecutor =
 
 ---
 
-# Thread pools
+# Thread Pools
 
 ## clojure.lang.Agent
 
@@ -878,19 +892,18 @@ volatile public static ExecutorService pooledExecutor =
 volatile public static ExecutorService soloExecutor = Executors.newCachedThreadPool(
         createThreadFactory("clojure-agent-send-off-pool-%d", sendOffThreadPoolCounter));
 ```
-
 ---
 
 # Advice
 
-* Close channels to indicate no more work
-* Let close! propagate through the syste
-* Wait for go blocks and threads to finish
-* Don't do too much IO in `go` blocks
-  * Especially if there may be other `go` blocks in the same process
-* Use alt!
-* Use merge
-
+* Consider using vars directly for metadata
+* Know when to use `map`, `doseq`, and `doall`
+* Concurrency:
+  * Consider using core.async
+  * Let close! propagate through the system
+  * Wait for go blocks and threads to finish
+  * Don't do too much IO in `go` blocks
+  * Use `thread` for IO
 
     </textarea>
     <script src="https://gnab.github.io/remark/downloads/remark-latest.min.js">
