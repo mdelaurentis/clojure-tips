@@ -1,4 +1,4 @@
-<!DCTYPE html>
+<!DOCTYPE html>
 <html>
   <head>
     <title>Clojure Best Practices</title>
@@ -273,7 +273,7 @@ clojure.core/doall
 # Laziness
 
 ```
-                       Will you consume the result?
+
 
                   Will consume             Will not consume
 
@@ -293,7 +293,7 @@ side effects
 # Laziness
 
 ```
-                       Will you consume the result?
+
 
                   Will consume             Will not consume
 
@@ -313,7 +313,7 @@ side effects
 # Laziness
 
 ```
-                       Will you consume the result?
+
 
                   Will consume             Will not consume
 
@@ -333,7 +333,7 @@ side effects
 # Laziness
 
 ```
-                       Will you consume the result?
+
 
                   Will consume             Will not consume
 
@@ -389,6 +389,7 @@ side effects                                wrong with you?
 ```
 
 * Runs body on another thread
+* Starts immediately
 * Deref to get result of body
 * Deref will block until body is done
 
@@ -411,9 +412,10 @@ side effects                                wrong with you?
 * Can be changed with multiple threads concurrently
   * only inside `dosync` block
   * `dosync` provides transaction isolation
+  * `dosync` can be retried!
+  * No side effects in dosync!
 * Get current value with deref operator - @
   * `deref` never blocks
-
 
 ---
 
@@ -898,4 +900,5 @@ volatile public static ExecutorService soloExecutor = Executors.newCachedThreadP
     </script>
   </body>
 </html>
+
 
